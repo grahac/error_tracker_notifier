@@ -48,8 +48,26 @@ config :my_app, :error_tracker,
   from_email: "support@example.com",
   to_email: "support@example.com",
   mailer: MyApp.Mailer,               # your app's Swoosh mailer module
-  webhook_url: "https://discord.com/api/webhooks/your-webhook-url"
+  webhook_url: "https://discord.com/api/webhooks/your-webhook-url",
+  base_url: "https://your-app-domain.com", # base URL for error links
+  error_tracker_path: "/errors"               # path to errors (default: "/dev/errors/")
 ```
+
+### URL Configuration
+
+You can customize the URLs generated for error links by configuring both the base URL and error path:
+
+```elixir
+config :my_app, :error_tracker,
+  # ... other settings
+  base_url: "https://your-app-domain.com", 
+  error_tracker_path: "/errors"  # default is "/dev/errors/"
+```
+
+The full URL generated will be: `<base_url><error_tracker_path>/<error_id>`
+
+For example, with the above configuration, an error with ID `abc123` would have the URL: 
+`https://your-app-domain.com/errors/abc123`
 
 ## Setup
 

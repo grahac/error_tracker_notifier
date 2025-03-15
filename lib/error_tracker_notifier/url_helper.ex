@@ -66,7 +66,19 @@ defmodule ErrorTrackerNotifier.UrlHelper do
   Generates a full URL to view an error in the error tracker.
   """
   def get_error_url(error_id) do
-    "#{get_base_url()}/dev/errors/#{error_id}"
+    app = app_atom()
+    error_tracker_config = Application.get_env(app, :error_tracker, [])
+
+    # Get the error path from config or use default
+    error_path = Keyword.get(error_tracker_config, :error_tracker_path, "/dev/errors/")
+
+    # Ensure path has leading slash and no trailing slash
+    error_path =
+      error_path
+      |> String.trim_trailing("/")
+      |> then(fn path -> if String.starts_with?(path, "/"), do: path, else: "/#{path}" end)
+
+    "#{get_base_url()}#{error_path}/#{error_id}"
   end
 
   # Determine the application atom to use for config lookup
