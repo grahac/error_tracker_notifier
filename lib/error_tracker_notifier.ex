@@ -110,8 +110,6 @@ defmodule ErrorTrackerNotifier do
       ) do
     Logger.info("ErrorTracker event: new error #{inspect(error.id)}")
     send_occurrence_notification(occurrence, "New Error!")
-
-    #    send_error_notification(error, "New Error Detected")
   end
 
   def handle_event(
@@ -125,17 +123,6 @@ defmodule ErrorTrackerNotifier do
     )
 
     send_occurrence_notification(occurrence, "New Error Occurrence")
-
-    # Check if the error is loaded in the occurrence
-    # case occurrence.error do
-    #   %ErrorTracker.Error{} = error ->
-    # Error is properly loaded, use it directly
-    #     send_error_notification(error, "New Error Occurrence")
-
-    # Association not loaded, use occurrence data instead
-    #      %Ecto.Association.NotLoaded{} ->
-    #       send_occurrence_notification(occurrence)
-    #  end
   end
 
   # Catch-all handler to log unexpected events
@@ -143,27 +130,6 @@ defmodule ErrorTrackerNotifier do
     Logger.info(
       "Unhandled ErrorTracker event: #{inspect(event)}, measurements: #{inspect(measurements)}, metadata: #{inspect(metadata)}"
     )
-  end
-
-  @doc """
-  Send a notification for a new error.
-  """
-  def send_error_notification(error, header) do
-    notification_types = get_notification_types()
-
-    Enum.map(notification_types, fn type ->
-      case type do
-        :email ->
-          Email.send_error_notification(error, header, config_app_name())
-
-        :discord ->
-          Discord.send_error_notification(error, header, config_app_name())
-
-        _ ->
-          Logger.error("Unknown notification type: #{type}")
-          {:error, :unknown_notification_type}
-      end
-    end)
   end
 
   @doc """

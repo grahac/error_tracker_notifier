@@ -8,36 +8,6 @@ defmodule ErrorTrackerNotifier.Email do
   alias ErrorTrackerNotifier.UrlHelper
 
   @doc """
-  Send an email notification for a new error.
-  """
-  def send_error_notification(error, header, config_app) do
-    from_email = ErrorTrackerNotifier.get_config(:from_email, "support@example.com")
-    to_email = ErrorTrackerNotifier.get_config(:to_email, "support@example.com")
-    app_name = ErrorTrackerNotifier.get_app_name()
-
-    # Extract file and line information for the subject line
-    error_name = error.reason |> String.slice(0, 80) || "Unknown error"
-    subject = "[#{app_name}] Error: #{error_name}"
-
-    email =
-      new()
-      |> to(to_email)
-      |> from({app_name, from_email})
-      |> subject(subject)
-      |> html_body(error_email_html(error, header))
-
-    case mailer(config_app).deliver(email) do
-      {:ok, _} ->
-        Logger.info("Error notification email sent successfully")
-        {:ok, "Email sent successfully"}
-
-      {:error, reason} ->
-        Logger.error("Failed to send error notification: #{inspect(reason)}")
-        {:error, reason}
-    end
-  end
-
-  @doc """
   Send an email notification for a new error occurrence.
   """
   def send_occurrence_notification(occurrence, header, config_app) do
@@ -76,40 +46,6 @@ defmodule ErrorTrackerNotifier.Email do
         Logger.error("Failed to send occurrence notification: #{inspect(reason)}")
         {:error, reason}
     end
-  end
-
-  defp error_email_html(error, _header) do
-    # Get the error URL
-    error_url = UrlHelper.get_error_url(error.id)
-
-    """
-    <div style="max-width: 600px; margin: 0 auto; padding: 20px; font-family: system-ui, -apple-system, sans-serif;">
-      <div style="background-color: white; border-radius: 8px; padding: 24px; box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1);">
-        <h1 style="color: #dc2626; font-size: 24px; font-weight: bold; margin-bottom: 16px;">
-          New Error Detected
-        </h1>
-        <p style="color: #374151; font-size: 16px; line-height: 24px; margin-bottom: 24px;">
-          ErrorTracker has detected a new error:
-        </p>
-
-        <div style="background-color: #f9fafb; border-radius: 6px; padding: 16px; margin-bottom: 24px;">
-          <p><strong>Error ID:</strong> #{error.id}</p>
-          <p><strong>Type:</strong> #{error.kind}</p>
-          <p><strong>Reason:</strong> #{String.slice(error.reason, 0..199)}</p>
-          <p><strong>Status:</strong> #{error.status}</p>
-          <p><strong>Time:</strong> #{format_time()}</p>
-        </div>
-
-        <p style="margin-bottom: 24px;">
-          <a href="#{error_url}"
-             style="display: inline-block; background-color: #dc2626; color: white; font-weight: 500;
-                    padding: 8px 16px; border-radius: 4px; text-decoration: none;">
-            View Error Details
-          </a>
-        </p>
-      </div>
-    </div>
-    """
   end
 
   defp occurrence_email_html(occurrence, header) do

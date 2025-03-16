@@ -7,56 +7,6 @@ defmodule ErrorTrackerNotifier.Discord do
   alias ErrorTrackerNotifier.UrlHelper
 
   @doc """
-  Send a Discord webhook notification for a new error.
-  """
-  def send_error_notification(error, header, _config_app) do
-    webhook_url = ErrorTrackerNotifier.get_config(:webhook_url, nil)
-    app_name = ErrorTrackerNotifier.get_app_name()
-
-    unless webhook_url do
-      Logger.error("No Discord webhook URL configured")
-      {:error, :missing_webhook_url}
-    else
-      # Get error URL
-      error_url = UrlHelper.get_error_url(error.id)
-
-      # Build the message payload
-      payload = %{
-        embeds: [
-          %{
-            title: "#{header} in #{app_name}",
-            # Indigo color
-            color: 0x4F46E5,
-            description: "ErrorTracker has detected an issue",
-            fields: [
-              %{name: "Error ID", value: error.id, inline: true},
-              %{name: "Type", value: error.type, inline: true},
-              %{name: "Occurrences", value: to_string(error.occurrence_count), inline: true},
-              %{name: "Message", value: truncate_message(error.message), inline: false},
-              %{name: "Time", value: format_time(), inline: false}
-            ],
-            url: error_url,
-            footer: %{
-              text: "ErrorTracker Notification"
-            }
-          }
-        ],
-        username: "Error Tracker"
-      }
-
-      case send_discord_webhook(webhook_url, payload) do
-        {:ok, _} ->
-          Logger.info("Discord notification sent successfully")
-          {:ok, "Discord notification sent successfully"}
-
-        {:error, reason} ->
-          Logger.error("Failed to send Discord notification: #{inspect(reason)}")
-          {:error, reason}
-      end
-    end
-  end
-
-  @doc """
   Send a Discord webhook notification for a new error occurrence.
   """
   def send_occurrence_notification(occurrence, _type, _config_app) do
