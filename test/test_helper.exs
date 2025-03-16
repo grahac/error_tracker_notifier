@@ -1,7 +1,25 @@
-# Setup test environment
-Application.put_env(:error_tracker_notifier, :error_tracker, [
-  notification_type: :test,
-  throttle_seconds: 10
-])
+ExUnit.start(exclude: [:skip, :integration])
 
-ExUnit.start()
+# Define mock modules if needed
+Application.put_env(:error_tracker_notifier, :on_load, [])
+
+# Create a test app configuration
+Application.put_env(:error_tracker_notifier, :test_app, 
+  error_tracker: [
+    notification_type: :test,
+    throttle_seconds: 1,
+    base_url: "https://example.com",
+    mailer: ErrorTrackerNotifier.TestHelpers.MockMailer
+  ]
+)
+
+# Create test support module
+defmodule ErrorTrackerNotifier.TestHelpers.MockMailer do
+  def deliver(email) do
+    send(self(), {:email, email})
+    {:ok, %{id: "test-email-id"}}
+  end
+end
+
+# Create test directories if needed
+File.mkdir_p!("test/support")
