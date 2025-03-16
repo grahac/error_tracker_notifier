@@ -50,8 +50,21 @@ config :my_app, :error_tracker,
   mailer: MyApp.Mailer,               # your app's Swoosh mailer module
   webhook_url: "https://discord.com/api/webhooks/your-webhook-url",
   base_url: "https://your-app-domain.com", # base URL for error links
-  error_tracker_path: "/errors"               # path to errors (default: "/dev/errors/")
+  error_tracker_path: "/errors",      # path to errors (default: "/dev/errors/")
+  throttle_seconds: 60                # time to wait between notifications for the same error
 ```
+
+### Throttling Notifications
+
+To prevent alert fatigue during error storms, you can configure throttling:
+
+```elixir
+config :my_app, :error_tracker,
+  # ... other settings
+  throttle_seconds: 10  # Only send one notification per error every 10 seconds (default)
+```
+
+When multiple errors of the same type occur within the throttle period, they are batched together. The next notification will include a count of how many occurrences were throttled, helping you understand the error frequency without being overwhelmed by notifications.
 
 ### URL Configuration
 
@@ -71,23 +84,36 @@ For example, with the above configuration, an error with ID `abc123` would have 
 
 ## Setup
 
-Add to your `application.ex`:
+You have two options for setting up ErrorTrackerNotifier:
+
+### Option 1: Add to your supervision tree (recommended)
+
+Add ErrorTrackerNotifier to your supervision tree in `application.ex`:
 
 ```elixir
 def start(_type, _args) do
   children = [
     # ...other children
+    {ErrorTrackerNotifier, []}
   ]
 
-  # Start the application supervisor
-  result = Supervisor.start_link(children, strategy: :one_for_one, name: MyApp.Supervisor)
-  
-  # Set up error notifications after the supervisor starts
-  ErrorTrackerNotifier.setup()
-  
-  result
+  # Start the application supervisor with ErrorTrackerNotifier
+  Supervisor.start_link(children, strategy: :one_for_one, name: MyApp.Supervisor)
 end
-``` 
+```
+
+This starts the ErrorTrackerNotifier GenServer which handles both notification sending and throttling.
+
+### Option 2: Just attach telemetry handlers
+
+If you don't need throttling or just want to use the telemetry handlers without starting a GenServer:
+
+```elixir
+# Call this during your application startup (after ErrorTracker is initialized)
+ErrorTrackerNotifier.setup_telemetry()
+```
+
+This approach only sets up the telemetry handlers without starting the GenServer. Note that with this approach, throttling won't be available - every error will trigger a notification. 
 #### Setting up a Discord Webhook
 
 To set up a Discord webhook for error notifications:
@@ -127,7 +153,7 @@ To set up a Discord webhook for error notifications:
 
 ## How It Works
 
-ErrorTrackerNotifier listens for telemetry events from the ErrorTracker library and sends notifications when new errors occur. It handles both new errors and new occurrences of existing errors.
+ErrorTrackerNotifier listens for telemetry events from the ErrorTracker library and sends notifications when new errors occur. It handles both new errors and new occurrences of existing errors, and implements throttling to prevent notification fatigue.
 
 ### Email Notifications
 
@@ -137,6 +163,7 @@ The notification emails include:
 - Stack trace information
 - Location where the error occurred
 - Request context
+- Count of occurrences (when throttling is active)
 
 ### Discord Notifications
 
@@ -148,7 +175,7 @@ Discord notifications provide several advantages:
 - **Rich formatting**: Error details are displayed in well-formatted embeds
 - **Searchable history**: Discord keeps a searchable history of all alerts
 
-The Discord notifications include the same information as emails, formatted as rich embeds for better readability.
+The Discord notifications include the same information as emails, formatted as rich embeds for better readability, including error occurrence counts when throttling is active.
 
 ## Dependencies
 

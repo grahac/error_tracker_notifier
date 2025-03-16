@@ -9,6 +9,7 @@ defmodule ErrorTrackerNotifier.Email do
 
   @doc """
   Send an email notification for a new error occurrence.
+  The header may include error count information if throttling has occurred.
   """
   def send_occurrence_notification(occurrence, header, config_app) do
     from_email = ErrorTrackerNotifier.get_config(:from_email, "support@example.com")
@@ -80,7 +81,7 @@ defmodule ErrorTrackerNotifier.Email do
           #{header}
         </h1>
         <p style="color: #374151; font-size: 16px; line-height: 24px; margin-bottom: 24px;">
-          ErrorTracker has detected a new error:
+          ErrorTracker has detected an error:
         </p>
 
         <div style="background-color: #f9fafb; border-radius: 6px; padding: 16px; margin-bottom: 24px;">

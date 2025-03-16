@@ -2,6 +2,8 @@ defmodule ErrorTrackerNotifier do
   @moduledoc """
   Attaches to ErrorTracker telemetry events and sends notifications for new errors.
 
+  Includes throttling to limit notification frequency for repeated errors.
+
   ## Configuration
 
   Configure in your config.exs:
@@ -12,12 +14,14 @@ defmodule ErrorTrackerNotifier do
     notification_type: :email,
     from_email: "support@example.com",
     to_email: "support@example.com",
-    mailer: MyApp.Mailer
+    mailer: MyApp.Mailer,
+    throttle_seconds: 10  # Optional: Throttle time between notifications (default: 10 seconds)
 
   # For Discord webhook notifications
   config :my_app, :error_tracker,
     notification_type: :discord,
-    webhook_url: "https://discord.com/api/webhooks/your-webhook-url"
+    webhook_url: "https://discord.com/api/webhooks/your-webhook-url",
+    throttle_seconds: 30  # Optional: Throttle time between notifications
 
   # For both email and Discord notifications
   config :my_app, :error_tracker,
@@ -25,7 +29,8 @@ defmodule ErrorTrackerNotifier do
     from_email: "support@example.com",
     to_email: "support@example.com",
     mailer: MyApp.Mailer,
-    webhook_url: "https://discord.com/api/webhooks/your-webhook-url"
+    webhook_url: "https://discord.com/api/webhooks/your-webhook-url",
+    throttle_seconds: 60  # Optional: Throttle time between notifications
   ```
 
   ## Setup
@@ -36,29 +41,221 @@ defmodule ErrorTrackerNotifier do
   def start(_type, _args) do
     children = [
       # ...other children
+      {ErrorTrackerNotifier, []}
     ]
 
     # Start the application supervisor
-    result = Supervisor.start_link(children, strategy: :one_for_one, name: MyApp.Supervisor)
-
-    # Set up error notifications after the supervisor starts
-    ErrorTrackerNotifier.setup()
-
-    result
+    Supervisor.start_link(children, strategy: :one_for_one, name: MyApp.Supervisor)
   end
   ```
   """
 
+  use GenServer
   require Logger
 
   alias ErrorTrackerNotifier.Email
   alias ErrorTrackerNotifier.Discord
 
+  # Cleanup old entries every 5 minutes
+  @cleanup_interval :timer.minutes(5)
+
+  # Client API
+
+  @doc """
+  Starts the ErrorTrackerNotifier process.
+
+  If the process is already started, returns {:error, {:already_started, pid}}.
+  This is the expected behavior when started by a supervisor.
+  """
+  def start_link(opts \\ []) do
+    GenServer.start_link(__MODULE__, opts, name: __MODULE__)
+  end
+
   @doc """
   Attach to ErrorTracker telemetry events.
-  Call this after your application starts - typically in your Application.start/2 callback.
+  Automatically called when the GenServer starts.
+
+  You can also call this function manually if you need to reattach telemetry events
+  or if you're starting the process in a different way.
   """
   def setup do
+    case Process.whereis(__MODULE__) do
+      nil ->
+        Logger.warning("Cannot setup telemetry - ErrorTrackerNotifier process not found")
+        {:error, :process_not_found}
+
+      _pid ->
+        GenServer.call(__MODULE__, :setup)
+    end
+  end
+
+  @doc """
+  Setup telemetry handlers directly without requiring the GenServer to be running.
+  This can be used in applications where you want to handle telemetry events but
+  don't want to start the GenServer process.
+
+  Returns :ok on success, or :error on failure.
+  """
+  def setup_telemetry do
+    do_setup()
+  end
+
+  @doc """
+  Send a notification for a new error occurrence.
+  """
+  def send_occurrence_notification(occurrence, header_txt) do
+    GenServer.call(__MODULE__, {:notify, occurrence, header_txt})
+  end
+
+  def get_app_name do
+    app_atom = app_atom()
+    Application.get_env(app_atom, :app_name, Atom.to_string(app_atom))
+  rescue
+    _ -> "Application"
+  end
+
+  def get_config(key, default) do
+    app = config_app_name()
+    config = Application.get_env(app, :error_tracker, [])
+    Keyword.get(config, key, default)
+  end
+
+  # GenServer callbacks
+
+  @impl true
+  def init(_opts) do
+    # Initialize state with an empty map for tracking error occurrences
+    state = %{
+      errors: %{},
+      setup_complete: false
+    }
+
+    # Schedule periodic cleanup
+    schedule_cleanup()
+
+    # Setup telemetry handlers
+    {:ok, state, {:continue, :setup}}
+  end
+
+  @impl true
+  def handle_continue(:setup, state) do
+    case do_setup() do
+      :ok -> {:noreply, %{state | setup_complete: true}}
+      _ -> {:noreply, state}
+    end
+  end
+
+  @impl true
+  def handle_call(:setup, _from, state) do
+    case do_setup() do
+      :ok -> {:reply, :ok, %{state | setup_complete: true}}
+      error -> {:reply, error, state}
+    end
+  end
+
+  @impl true
+  def handle_call({:notify, occurrence, header_txt}, _from, state) do
+    {result, new_state} = handle_notification(occurrence, header_txt, state)
+    {:reply, result, new_state}
+  end
+
+  # Handle all info messages
+  @impl true
+  def handle_info(message, state) do
+    case message do
+      # Handle cleanup timer
+      :cleanup ->
+        # Schedule next cleanup first to ensure it always runs
+        schedule_cleanup()
+
+        # Remove error records older than 1 hour
+        cleaned_state = cleanup_old_records(state)
+
+        {:noreply, cleaned_state}
+
+      # Handle telemetry events
+      {:telemetry_event, event_name, measurements, metadata, _config} ->
+        try do
+          process_telemetry_event(event_name, measurements, metadata, state)
+        rescue
+          error ->
+            Logger.error("Error processing telemetry event: #{inspect(error)}")
+            {:noreply, state}
+        end
+
+      # Handle unexpected messages
+      unexpected ->
+        Logger.debug("Unexpected message received: #{inspect(unexpected)}")
+        {:noreply, state}
+    end
+  end
+
+  # Public telemetry event handler for Telemetry to call
+  @doc false
+  def handle_telemetry_event(event_name, measurements, metadata, config) do
+    # Forward telemetry events to the GenServer process
+    case Process.whereis(__MODULE__) do
+      nil ->
+        Logger.warning("Cannot forward telemetry event - ErrorTrackerNotifier process not found")
+
+      pid ->
+        send(pid, {:telemetry_event, event_name, measurements, metadata, config})
+    end
+  end
+
+  # Process telemetry events within the GenServer
+  defp process_telemetry_event(event_name, measurements, metadata, state) do
+    case event_name do
+      [:error_tracker, :error, :new] ->
+        error_id = metadata.error.id
+        reason = truncate_reason(metadata.occurrence.reason)
+        Logger.debug("ErrorTrackerNotifier event: new error #{inspect(error_id)}")
+        {_, new_state} = handle_notification(metadata.occurrence, "New Error! (#{reason})", state)
+        {:noreply, new_state}
+
+      [:error_tracker, :occurrence, :new] ->
+        occurrence_id = metadata.occurrence.id
+        error_id = metadata.occurrence.error_id
+        reason = truncate_reason(metadata.occurrence.reason)
+
+        Logger.debug(
+          "ErrorTrackerNotifier event: new occurrence #{inspect(occurrence_id)} " <>
+            "for error #{inspect(error_id)}"
+        )
+
+        {_, new_state} =
+          handle_notification(metadata.occurrence, "Error: #{reason}", state)
+
+        {:noreply, new_state}
+
+      _ ->
+        Logger.debug(
+          "Unhandled ErrorTracker event: #{inspect(event_name)}, " <>
+            "measurements: #{inspect(measurements)}, metadata: #{inspect(metadata)}"
+        )
+
+        {:noreply, state}
+    end
+  end
+
+  # Clean up error records older than 1 hour
+  defp cleanup_old_records(state) do
+    now = System.system_time(:second)
+    one_day_ago = (now - :timer.hours(1)) |> div(1000)
+
+    cleaned_errors =
+      Enum.filter(state.errors, fn {_error_id, %{last_time: last_time}} ->
+        last_time >= one_day_ago
+      end)
+      |> Map.new()
+
+    # Return updated state with cleaned errors
+    %{state | errors: cleaned_errors}
+  end
+
+  # Private implementation
+
+  defp do_setup do
     # Check if ErrorTracker is loaded
     unless Code.ensure_loaded?(ErrorTracker) do
       Logger.warning(
@@ -81,14 +278,16 @@ defmodule ErrorTrackerNotifier do
         :telemetry.attach_many(
           "error-tracker-notifications",
           events,
-          &__MODULE__.handle_event/4,
+          &__MODULE__.handle_telemetry_event/4,
           nil
         )
 
       notification_types = get_notification_types()
       types_str = notification_types |> Enum.map(&to_string/1) |> Enum.join(" and ")
 
-      Logger.info("ErrorTracker #{types_str} notifications set up for new errors and occurrences")
+      Logger.debug(
+        "ErrorTracker #{types_str} notifications set up for new errors and occurrences"
+      )
 
       :ok
     end
@@ -98,72 +297,76 @@ defmodule ErrorTrackerNotifier do
       :error
   end
 
-  @doc """
-  Telemetry event handler for ErrorTracker events.
-  """
-  def handle_event(
-        [:error_tracker, :error, :new],
-        %{system_time: _system_time},
-        %{error: error},
-        %{occurrence: occurrence},
-        _config
-      ) do
-    Logger.info("ErrorTracker event: new error #{inspect(error.id)}")
-    send_occurrence_notification(occurrence, "New Error!")
+  defp handle_notification(occurrence, header_txt, state) do
+    error_id = occurrence.error_id
+    now = System.system_time(:second)
+    throttle_seconds = get_config(:throttle_seconds, 10)
+
+    # Check current error state
+    error_state = Map.get(state.errors, error_id, %{count: 0, last_time: 0})
+    time_since_last = now - error_state.last_time
+
+    cond do
+      # First occurrence or outside throttle window
+      error_state.last_time == 0 || time_since_last >= throttle_seconds ->
+        # Send notification with count from previous batch (if any)
+        count_to_report = error_state.count
+
+        # Send the notification
+        result = send_notifications(occurrence, header_txt, count_to_report)
+
+        # Reset counter and update timestamp
+        updated_errors =
+          Map.put(state.errors, error_id, %{
+            # Start with 0 for the current occurrence (it's already been reported)
+            count: 0,
+            last_time: now
+          })
+
+        {result, %{state | errors: updated_errors}}
+
+      # Within throttle window
+      true ->
+        # Increment count but don't send notification
+        updated_error = %{
+          count: error_state.count + 1,
+          last_time: error_state.last_time
+        }
+
+        updated_errors = Map.put(state.errors, error_id, updated_error)
+
+        Logger.debug(
+          "Throttled notification for error #{error_id}. Count: #{updated_error.count}"
+        )
+
+        {[{:throttled, error_id, updated_error.count}], %{state | errors: updated_errors}}
+    end
   end
 
-  def handle_event(
-        [:error_tracker, :occurrence, :new],
-        %{system_time: _system_time},
-        %{occurrence: occurrence} = _metadata,
-        _config
-      ) do
-    Logger.info(
-      "ErrorTracker event: new occurrence #{inspect(occurrence.id)} for error #{inspect(occurrence.error_id)}"
-    )
-
-    send_occurrence_notification(occurrence, "New Error Occurrence")
-  end
-
-  # Catch-all handler to log unexpected events
-  def handle_event(event, measurements, metadata, _config) do
-    Logger.info(
-      "Unhandled ErrorTracker event: #{inspect(event)}, measurements: #{inspect(measurements)}, metadata: #{inspect(metadata)}"
-    )
-  end
-
-  @doc """
-  Send a notification for a new error occurrence.
-  """
-  def send_occurrence_notification(occurrence, header_txt) do
+  defp send_notifications(occurrence, header_txt, count) do
     notification_types = get_notification_types()
+
+    # Format the header with count information when applicable
+    header_with_count = format_header_with_count(header_txt, count)
 
     Enum.map(notification_types, fn type ->
       case type do
         :email ->
-          Email.send_occurrence_notification(occurrence, header_txt, config_app_name())
+          Email.send_occurrence_notification(occurrence, header_with_count, config_app_name())
 
         :discord ->
-          Discord.send_occurrence_notification(occurrence, header_txt, config_app_name())
+          Discord.send_occurrence_notification(occurrence, header_with_count, config_app_name())
+
+        :test ->
+          # Special case for tests - don't actually send notifications
+          Logger.debug("Test notification for error #{occurrence.error_id}")
+          {:ok, :test_notification_sent}
 
         _ ->
           Logger.error("Unknown notification type: #{type}")
           {:error, :unknown_notification_type}
       end
     end)
-  end
-
-  def get_app_name do
-    app_atom = app_atom()
-    Application.get_env(app_atom, :app_name, Atom.to_string(app_atom))
-  rescue
-    _ -> "Application"
-  end
-
-  def get_config(key, default) do
-    app = config_app_name()
-    config = Application.get_env(app, :error_tracker, [])
-    Keyword.get(config, key, default)
   end
 
   # Get notification types from config, supporting both atom and list formats
@@ -193,5 +396,41 @@ defmodule ErrorTrackerNotifier do
     # Default application name to look for in config
     config_app = Application.get_env(:error_tracker_notifier, :config_app_name)
     config_app || app_atom()
+  end
+
+  # Format header text with count information when applicable
+  defp format_header_with_count(header_txt, count) do
+    occurrence_text =
+      case count do
+        0 ->
+          ""
+
+        1 ->
+          ""
+
+        _ ->
+          " (#{count} occurrences)"
+      end
+
+    "#{header_txt}#{occurrence_text}"
+  end
+
+  # Schedule the next cleanup operation
+  defp schedule_cleanup do
+    Process.send_after(self(), :cleanup, @cleanup_interval)
+  end
+
+  # Truncate reason to max 80 characters
+  defp truncate_reason(reason) when is_binary(reason) do
+    if String.length(reason) > 80 do
+      String.slice(reason, 0, 77) <> "..."
+    else
+      reason
+    end
+  end
+
+  defp truncate_reason(reason) do
+    # If reason isn't a string, convert it to string
+    reason |> inspect() |> truncate_reason()
   end
 end

@@ -8,8 +8,9 @@ defmodule ErrorTrackerNotifier.Discord do
 
   @doc """
   Send a Discord webhook notification for a new error occurrence.
+  The header may include error count information if throttling has occurred.
   """
-  def send_occurrence_notification(occurrence, _type, _config_app) do
+  def send_occurrence_notification(occurrence, header_txt, _config_app) do
     webhook_url = ErrorTrackerNotifier.get_config(:webhook_url, nil)
     app_name = ErrorTrackerNotifier.get_app_name()
 
@@ -45,10 +46,10 @@ defmodule ErrorTrackerNotifier.Discord do
       payload = %{
         embeds: [
           %{
-            title: "[#{app_name}] New Error Occurrence: #{error_name}",
+            title: "[#{app_name}] #{header_txt}",
             # Indigo color
             color: 0x4F46E5,
-            description: "ErrorTracker has detected a new error occurrence",
+            description: "Error: #{error_name}",
             fields: [
               %{name: "Error ID", value: occurrence.error_id, inline: true},
               %{
