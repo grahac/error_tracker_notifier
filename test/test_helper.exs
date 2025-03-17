@@ -1,10 +1,13 @@
+# Set runtime mode for tests
+Application.put_env(:error_tracker_notifier, :runtime_mode, :test)
+
 ExUnit.start(exclude: [:skip, :integration])
 
 # Define mock modules if needed
 Application.put_env(:error_tracker_notifier, :on_load, [])
 
 # Create a test app configuration
-Application.put_env(:error_tracker_notifier, :test_app, 
+Application.put_env(:error_tracker_notifier, :test_app,
   error_tracker: [
     notification_type: :test,
     throttle_seconds: 1,

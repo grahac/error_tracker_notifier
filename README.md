@@ -12,7 +12,7 @@ The package can be installed by adding `error_tracker_notifier` to your list of 
 ```elixir
 def deps do
   [
-    {:error_tracker_notifier, "~> 0.1.0"}
+    {:error_tracker_notifier, "~> 0.1.1"}
   ]
 end
 ```
@@ -198,3 +198,47 @@ For Discord notifications:
 Documentation can be generated with [ExDoc](https://github.com/elixir-lang/ex_doc)
 and published on [HexDocs](https://hexdocs.pm). Once published, the docs can
 be found at <https://hexdocs.pm/error_tracker_notifier>.
+
+### Environment-Specific Configuration
+
+ErrorTrackerNotifier is designed to work well with environment-specific configurations. If you only want to receive error notifications in your production environment, you can simply:
+
+1. Only define the configuration in `prod.exs` or `runtime.exs` (using `prod` as the environment)
+2. Leave the configuration undefined in `dev.exs` and `test.exs`
+
+When running in development or test environments, ErrorTrackerNotifier will automatically detect the absence of configuration and gracefully shut down without sending any notifications or logging errors.
+
+```elixir
+# Only in prod.exs or in runtime.exs with environment check
+if config_env() == :prod do
+  config :my_app, :error_tracker,
+    notification_type: [:email, :discord],
+    # ... other configuration
+end
+```
+
+This way, developers can work locally without worrying about error notifications firing in development environments.
+
+### Testing with ErrorTrackerNotifier
+
+ErrorTrackerNotifier provides a clean way to handle testing without affecting production behavior:
+
+1. The library checks for a `:runtime_mode` configuration setting:
+   ```elixir
+   # In test_helper.exs
+   Application.put_env(:error_tracker_notifier, :runtime_mode, :test)
+   ```
+
+2. In test mode, configuration validation is bypassed, allowing tests to run without error notifications
+   
+3. You can still configure specific test behavior if needed:
+   ```elixir
+   # In test setup
+   Application.put_env(:your_app, :error_tracker,
+     notification_type: :test  # Special test type that doesn't send actual notifications
+   )
+   ```
+
+This separation ensures your tests run correctly while maintaining the production behavior of gracefully shutting down when no configuration is present.
+
+### Email Notifications

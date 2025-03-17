@@ -117,6 +117,15 @@ defmodule ErrorTrackerNotifier do
   def get_config(key, default) do
     app = config_app_name()
     config = Application.get_env(app, :error_tracker, [])
+
+    # If config is empty and we're not in the init phase (checking for valid config),
+    # log a warning about missing configuration
+    if config == [] and runtime_mode() != :test and Process.whereis(__MODULE__) != nil do
+      Logger.warning(
+        "ErrorTrackerNotifier: No configuration found for #{inspect(app)}:error_tracker"
+      )
+    end
+
     Keyword.get(config, key, default)
   end
 
@@ -124,17 +133,24 @@ defmodule ErrorTrackerNotifier do
 
   @impl true
   def init(_opts) do
-    # Initialize state with an empty map for tracking error occurrences
-    state = %{
-      errors: %{},
-      setup_complete: false
-    }
+    # Check if we have valid configuration to determine whether to start
+    if has_valid_config?() do
+      # Initialize state with an empty map for tracking error occurrences
+      state = %{
+        errors: %{},
+        setup_complete: false
+      }
 
-    # Schedule periodic cleanup
-    schedule_cleanup()
+      # Schedule periodic cleanup
+      schedule_cleanup()
 
-    # Setup telemetry handlers
-    {:ok, state, {:continue, :setup}}
+      # Setup telemetry handlers
+      {:ok, state, {:continue, :setup}}
+    else
+      # No valid configuration found, shut down gracefully
+      Logger.info("ErrorTrackerNotifier shutting down: No configuration found")
+      :ignore
+    end
   end
 
   @impl true
@@ -432,5 +448,77 @@ defmodule ErrorTrackerNotifier do
   defp truncate_reason(reason) do
     # If reason isn't a string, convert it to string
     reason |> inspect() |> truncate_reason()
+  end
+
+  # Get app runtime mode - either :normal or :test
+  defp runtime_mode do
+    # Check application config for runtime mode, defaulting to :normal
+    Application.get_env(:error_tracker_notifier, :runtime_mode, :normal)
+  end
+
+  # Check if we have valid configuration based on notification types
+  defp has_valid_config?() do
+    # Check runtime mode - :test mode always starts
+    case runtime_mode() do
+      :test ->
+        true
+
+      :normal ->
+        # Normal config validation logic
+        app = config_app_name()
+        config = Application.get_env(app, :error_tracker, [])
+
+        # Return false if config is empty
+        if config == [] do
+          false
+        else
+          # Get notification types from config
+          notification_type = Keyword.get(config, :notification_type, nil)
+
+          # If no notification type is set, return false
+          if is_nil(notification_type) do
+            false
+          else
+            # Convert to list if it's a single atom
+            notification_types = List.wrap(notification_type)
+
+            # Check each notification type for required config
+            Enum.any?(notification_types, fn type ->
+              case type do
+                :email ->
+                  has_email_config?(config)
+
+                :discord ->
+                  has_discord_config?(config)
+
+                :test ->
+                  # Test type doesn't need additional config
+                  true
+
+                _ ->
+                  false
+              end
+            end)
+          end
+        end
+    end
+  end
+
+  # Check if we have the minimum required email configuration
+  defp has_email_config?(config) do
+    from_email = Keyword.get(config, :from_email)
+    to_email = Keyword.get(config, :to_email)
+    mailer = Keyword.get(config, :mailer)
+
+    # All three are required for email configuration
+    not is_nil(from_email) and not is_nil(to_email) and not is_nil(mailer)
+  end
+
+  # Check if we have the minimum required Discord configuration
+  defp has_discord_config?(config) do
+    webhook_url = Keyword.get(config, :webhook_url)
+
+    # Webhook URL is required for Discord configuration
+    not is_nil(webhook_url)
   end
 end
