@@ -1,6 +1,9 @@
 # ErrorTrackerNotifier
 
-An Elixir library that attaches to ErrorTracker telemetry events and sends email notifications for new errors.
+ErrorTrackerNotifier is an Elixir library that adds to the amazing [ErrorTracker](https://github.com/elixir-error-tracker/error-tracker) library by sending email and/or Discord notifications for errors found by error_tracker. Note: This is a very early version and was mostly vibe-coded with some oversight so no promises!
+
+
+
 
 ## Installation
 
