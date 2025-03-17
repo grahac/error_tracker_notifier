@@ -1,6 +1,7 @@
 # Changelog
 
 ## 0.1.1 (2025-03-17)
+# Changed config from :error_tracker to :error_tracker_notifications.  Please update config.
 
 ### Added
 - Better error handling when configuration is missing
