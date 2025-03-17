@@ -11,7 +11,7 @@ defmodule ErrorTrackerNotifier.UrlHelper do
   The client application must set this in their config:
 
   ```elixir
-  config :your_app, :error_tracker,
+  config :your_app, :error_tracker_notifier,
     # ... other error tracker config
     base_url: "https://your-app-domain.com"
   ```
@@ -19,7 +19,7 @@ defmodule ErrorTrackerNotifier.UrlHelper do
   or for environment-specific URLs:
 
   ```elixir
-  config :your_app, :error_tracker,
+  config :your_app, :error_tracker_notifier,
     # ... other error tracker config
     base_url: System.get_env("APP_BASE_URL", "https://localhost:4000")
   ```
@@ -29,7 +29,7 @@ defmodule ErrorTrackerNotifier.UrlHelper do
   """
   def get_base_url do
     app = app_atom()
-    error_tracker_config = Application.get_env(app, :error_tracker, [])
+    error_tracker_config = Application.get_env(app, :error_tracker_notifier, [])
 
     case Keyword.get(error_tracker_config, :base_url) do
       url when is_binary(url) and url != "" ->
@@ -46,7 +46,7 @@ defmodule ErrorTrackerNotifier.UrlHelper do
             # Log error if endpoint not found or available
             Logger.error(
               "Base URL not configured and could not use application endpoint: #{reason}. " <>
-                "Please add to your config: config #{inspect(app)}, :error_tracker, base_url: \"https://your-app-domain.com\""
+                "Please add to your config: config #{inspect(app)}, :error_tracker_notifier, base_url: \"https://your-app-domain.com\""
             )
 
             "http://localhost:4000"
@@ -67,7 +67,7 @@ defmodule ErrorTrackerNotifier.UrlHelper do
   """
   def get_error_url(error_id) do
     app = app_atom()
-    error_tracker_config = Application.get_env(app, :error_tracker, [])
+    error_tracker_config = Application.get_env(app, :error_tracker_notifier, [])
 
     # Get the error path from config or use default
     error_path = Keyword.get(error_tracker_config, :error_tracker_path, "/dev/errors/")

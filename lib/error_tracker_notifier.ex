@@ -10,7 +10,7 @@ defmodule ErrorTrackerNotifier do
 
   ```elixir
   # For email notifications
-  config :my_app, :error_tracker,
+  config :my_app, :error_tracker_notifier,
     notification_type: :email,
     from_email: "support@example.com",
     to_email: "support@example.com",
@@ -18,13 +18,13 @@ defmodule ErrorTrackerNotifier do
     throttle_seconds: 10  # Optional: Throttle time between notifications (default: 10 seconds)
 
   # For Discord webhook notifications
-  config :my_app, :error_tracker,
+  config :my_app, :error_tracker_notifier,
     notification_type: :discord,
     webhook_url: "https://discord.com/api/webhooks/your-webhook-url",
     throttle_seconds: 30  # Optional: Throttle time between notifications
 
   # For both email and Discord notifications
-  config :my_app, :error_tracker,
+  config :my_app, :error_tracker_notifier,
     notification_type: [:email, :discord],  # Can be a single atom or a list
     from_email: "support@example.com",
     to_email: "support@example.com",
@@ -116,13 +116,13 @@ defmodule ErrorTrackerNotifier do
 
   def get_config(key, default) do
     app = config_app_name()
-    config = Application.get_env(app, :error_tracker, [])
+    config = Application.get_env(app, :error_tracker_notifier, [])
 
     # If config is empty and we're not in the init phase (checking for valid config),
     # log a warning about missing configuration
     if config == [] and runtime_mode() != :test and Process.whereis(__MODULE__) != nil do
       Logger.warning(
-        "ErrorTrackerNotifier: No configuration found for #{inspect(app)}:error_tracker"
+        "ErrorTrackerNotifier: No configuration found for #{inspect(app)}:error_tracker_notifier"
       )
     end
 
@@ -466,7 +466,7 @@ defmodule ErrorTrackerNotifier do
       :normal ->
         # Normal config validation logic
         app = config_app_name()
-        config = Application.get_env(app, :error_tracker, [])
+        config = Application.get_env(app, :error_tracker_notifier, [])
 
         # Return false if config is empty
         if config == [] do

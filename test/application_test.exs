@@ -4,7 +4,7 @@ defmodule ErrorTrackerNotifier.ApplicationTest do
   setup do
     # Configure with test notification type only, no external services
     Application.put_env(:error_tracker_notifier, :test_app,
-      error_tracker: [
+      error_tracker_notifier: [
         notification_type: :test,
         throttle_seconds: 1
       ]

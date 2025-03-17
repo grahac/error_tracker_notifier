@@ -30,7 +30,7 @@ defmodule ErrorTrackerNotifier.TestHelpers do
     Application.put_env(
       :error_tracker_notifier,
       :test_app,
-      error_tracker: [
+      error_tracker_notifier: [
         notification_type: [:test, :email],
         from_email: "test@example.com",
         to_email: "alerts@example.com", 
@@ -46,7 +46,7 @@ defmodule ErrorTrackerNotifier.TestHelpers do
     Application.put_env(
       :error_tracker_notifier,
       :test_app,
-      error_tracker: [
+      error_tracker_notifier: [
         notification_type: :test,
         throttle_seconds: 1
       ]

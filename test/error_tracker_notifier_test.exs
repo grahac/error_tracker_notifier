@@ -16,7 +16,7 @@ defmodule ErrorTrackerNotifierTest do
 
     # Configure with test notification type only, no external services
     Application.put_env(:error_tracker_notifier, :test_app,
-      error_tracker: [
+      error_tracker_notifier: [
         notification_type: :test,
         throttle_seconds: 1,
         mailer: ErrorTrackerNotifier.TestHelpers.MockMailer
@@ -97,7 +97,7 @@ defmodule ErrorTrackerNotifierTest do
       assert state.setup_complete
 
       # Verify the handler is attached
-      handlers = :telemetry.list_handlers([:error_tracker, :error, :new])
+      handlers = :telemetry.list_handlers([:error_tracker_notifier, :error, :new])
 
       assert Enum.any?(handlers, fn handler ->
                handler.id == "error-tracker-notifications"
@@ -109,7 +109,7 @@ defmodule ErrorTrackerNotifierTest do
         capture_log(fn ->
           # Send a telemetry event simulating a new error
           :telemetry.execute(
-            [:error_tracker, :error, :new],
+            [:error_tracker_notifier, :error, :new],
             %{system_time: System.system_time()},
             %{
               error: %{id: occurrence.error_id},
@@ -133,7 +133,7 @@ defmodule ErrorTrackerNotifierTest do
         capture_log(fn ->
           # Send a telemetry event simulating a new occurrence
           :telemetry.execute(
-            [:error_tracker, :occurrence, :new],
+            [:error_tracker_notifier, :occurrence, :new],
             %{system_time: System.system_time()},
             %{occurrence: occurrence}
           )
@@ -172,7 +172,7 @@ defmodule ErrorTrackerNotifierTest do
       Application.put_env(
         :error_tracker_notifier,
         :test_app,
-        error_tracker: [notification_type: :discord]
+        error_tracker_notifier: [notification_type: :discord]
       )
 
       # Capture logs
@@ -198,7 +198,7 @@ defmodule ErrorTrackerNotifierTest do
       Application.put_env(
         :error_tracker_notifier,
         :test_app,
-        error_tracker: [
+        error_tracker_notifier: [
           notification_type: :email,
           from_email: "test@example.com",
           to_email: "alerts@example.com"

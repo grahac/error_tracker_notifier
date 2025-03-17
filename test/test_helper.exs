@@ -8,7 +8,7 @@ Application.put_env(:error_tracker_notifier, :on_load, [])
 
 # Create a test app configuration
 Application.put_env(:error_tracker_notifier, :test_app,
-  error_tracker: [
+  error_tracker_notifier: [
     notification_type: :test,
     throttle_seconds: 1,
     base_url: "https://example.com",
