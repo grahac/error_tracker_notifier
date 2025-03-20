@@ -11,7 +11,7 @@ defmodule ErrorTrackerNotifier.UrlHelper do
   The client application must set this in their config:
 
   ```elixir
-  config :your_app, :error_tracker_notifier,
+  config :error_tracker_notifier,
     # ... other error tracker config
     base_url: "https://your-app-domain.com"
   ```
@@ -19,7 +19,7 @@ defmodule ErrorTrackerNotifier.UrlHelper do
   or for environment-specific URLs:
 
   ```elixir
-  config :your_app, :error_tracker_notifier,
+  config :error_tracker_notifier,
     # ... other error tracker config
     base_url: System.get_env("APP_BASE_URL", "https://localhost:4000")
   ```
@@ -28,16 +28,32 @@ defmodule ErrorTrackerNotifier.UrlHelper do
   module (e.g., MyAppWeb.Endpoint.url()) if available.
   """
   def get_base_url do
-    app = app_atom()
-    error_tracker_config = Application.get_env(app, :error_tracker_notifier, [])
-
-    case Keyword.get(error_tracker_config, :base_url) do
+    case Application.get_env(:error_tracker_notifier, :base_url) do
       url when is_binary(url) and url != "" ->
         # Remove any trailing slash for consistency
         String.trim_trailing(url, "/")
-
+        
       nil ->
         # Try to get URL from the application's endpoint
+        app = app_atom()
+        
+        # Check for legacy config and show warning
+        legacy_config = Application.get_env(app, :error_tracker_notifier)
+        if legacy_config && Keyword.has_key?(legacy_config, :base_url) do
+          Logger.error("""
+          [ERROR] Found base_url configuration under #{inspect(app)}:error_tracker_notifier instead of :error_tracker_notifier
+          
+          The configuration format has changed. Please update your config files:
+          
+          Old format (no longer supported):
+            config :#{app}, :error_tracker_notifier, base_url: "your-url"
+          
+          New format (required):
+            config :error_tracker_notifier, base_url: "your-url"
+          """)
+        end
+        
+        # Try to use endpoint as fallback
         case find_and_use_endpoint(app) do
           {:ok, url} ->
             String.trim_trailing(url, "/")
@@ -46,18 +62,18 @@ defmodule ErrorTrackerNotifier.UrlHelper do
             # Log error if endpoint not found or available
             Logger.error(
               "Base URL not configured and could not use application endpoint: #{reason}. " <>
-                "Please add to your config: config #{inspect(app)}, :error_tracker_notifier, base_url: \"https://your-app-domain.com\""
+                "Please add to your config: config :error_tracker_notifier, base_url: \"https://your-app-domain.com\""
             )
 
             "http://localhost:4000"
         end
-
+        
       invalid ->
         # Log error for misconfigured value
         Logger.error(
           "Invalid base_url configuration: #{inspect(invalid)}. Please set a valid URL string."
         )
-
+        
         "http://localhost:4000"
     end
   end
@@ -66,11 +82,26 @@ defmodule ErrorTrackerNotifier.UrlHelper do
   Generates a full URL to view an error in the error tracker.
   """
   def get_error_url(error_id) do
-    app = app_atom()
-    error_tracker_config = Application.get_env(app, :error_tracker_notifier, [])
+    error_path = Application.get_env(:error_tracker_notifier, :error_tracker_path, "/dev/errors/")
 
-    # Get the error path from config or use default
-    error_path = Keyword.get(error_tracker_config, :error_tracker_path, "/dev/errors/")
+    # Check for legacy config and show warning
+    app = app_atom()
+    if app != :error_tracker_notifier do
+      legacy_config = Application.get_env(app, :error_tracker_notifier)
+      if legacy_config && Keyword.has_key?(legacy_config, :error_tracker_path) do
+        Logger.error("""
+        [ERROR] Found error_tracker_path configuration under #{inspect(app)}:error_tracker_notifier instead of :error_tracker_notifier
+        
+        The configuration format has changed. Please update your config files:
+        
+        Old format (no longer supported):
+          config :#{app}, :error_tracker_notifier, error_tracker_path: "/errors"
+        
+        New format (required):
+          config :error_tracker_notifier, error_tracker_path: "/errors"
+        """)
+      end
+    end
 
     # Ensure path has leading slash and no trailing slash
     error_path =

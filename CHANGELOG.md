@@ -1,7 +1,14 @@
 # Changelog
 
+## 0.2.0 (Unreleased)
+
+### Breaking Changes
+- Use standard library configuration pattern (`config :error_tracker_notifier, key: value`)
+- Removed support for legacy app-nested configuration style (`config :my_app, :error_tracker_notifier, ...`)
+- Added explicit error messages to help migrate from legacy configuration
+
 ## 0.1.1 (2025-03-17)
-# Changed config from :error_tracker to :error_tracker_notifications.  Please update config.
+# Changed config from :error_tracker to :error_tracker_notifications. Please update config.
 
 ### Added
 - Better error handling when configuration is missing

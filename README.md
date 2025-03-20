@@ -19,12 +19,23 @@ end
 
 ## Configuration
 
-### Email Notifications
-
-Configure email notifications in your `config.exs`:
+Configure the library directly in your `config.exs`:
 
 ```elixir
-config :my_app, :error_tracker_notifier,
+config :error_tracker_notifier,
+  notification_type: :email,       # can be a single atom or a list
+  from_email: "support@example.com",
+  to_email: "support@example.com",
+  mailer: MyApp.Mailer,            # your app's Swoosh mailer module
+  base_url: "https://your-app-domain.com"
+```
+
+### Email Notifications
+
+Configure email notifications:
+
+```elixir
+config :error_tracker_notifier,
   notification_type: :email,       # can be a single atom or a list
   from_email: "support@example.com",
   to_email: "support@example.com",
@@ -33,10 +44,10 @@ config :my_app, :error_tracker_notifier,
 
 ### Discord Webhook Notifications
 
-Configure Discord webhook notifications in your `config.exs`:
+Configure Discord webhook notifications:
 
 ```elixir
-config :my_app, :error_tracker_notifier,
+config :error_tracker_notifier,
   notification_type: :discord,     # can be a single atom or a list
   webhook_url: "https://discord.com/api/webhooks/your-webhook-url"
 ```
@@ -46,7 +57,7 @@ config :my_app, :error_tracker_notifier,
 You can configure both email and Discord notifications to be sent simultaneously:
 
 ```elixir
-config :my_app, :error_tracker_notifier,
+config :error_tracker_notifier,
   notification_type: [:email, :discord], # list of notification types
   from_email: "support@example.com",
   to_email: "support@example.com",
@@ -62,7 +73,7 @@ config :my_app, :error_tracker_notifier,
 To prevent alert fatigue during error storms, you can configure throttling:
 
 ```elixir
-config :my_app, :error_tracker_notifier,
+config :error_tracker_notifier,
   # ... other settings
   throttle_seconds: 10  # Only send one notification per error every 10 seconds (default)
 ```
@@ -74,7 +85,7 @@ When multiple errors of the same type occur within the throttle period, they are
 You can customize the URLs generated for error links by configuring both the base URL and error path:
 
 ```elixir
-config :my_app, :error_tracker_notifier,
+config :error_tracker_notifier,
   # ... other settings
   base_url: "https://your-app-domain.com", 
   error_tracker_path: "/errors"  # default is "/dev/errors/"
@@ -211,7 +222,7 @@ When running in development or test environments, ErrorTrackerNotifier will auto
 ```elixir
 # Only in prod.exs or in runtime.exs with environment check
 if config_env() == :prod do
-  config :my_app, :error_tracker_notifier,
+  config :error_tracker_notifier,
     notification_type: [:email, :discord],
     # ... other configuration
 end
@@ -234,9 +245,7 @@ ErrorTrackerNotifier provides a clean way to handle testing without affecting pr
 3. You can still configure specific test behavior if needed:
    ```elixir
    # In test setup
-   Application.put_env(:your_app, :error_tracker_notifier,
-     notification_type: :test  # Special test type that doesn't send actual notifications
-   )
+   Application.put_env(:error_tracker_notifier, :notification_type, :test)  # Special test type that doesn't send actual notifications
    ```
 
 This separation ensures your tests run correctly while maintaining the production behavior of gracefully shutting down when no configuration is present.
