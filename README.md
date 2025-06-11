@@ -1,5 +1,9 @@
 # ErrorTrackerNotifier
 
+<a title="GitHub CI" href="https://github.com/grahac/error_tracker_notifier/actions"><img src="https://github.com/grahac/error_tracker_notifier/workflows/CI/badge.svg" alt="GitHub CI" /></a>
+<a title="Latest release" href="https://hex.pm/packages/error_tracker_notifier"><img src="https://img.shields.io/hexpm/v/error_tracker_notifier.svg" alt="Latest release" /></a>
+<a title="View documentation" href="https://hexdocs.pm/error_tracker_notifier"><img src="https://img.shields.io/badge/hex.pm-docs-blue.svg" alt="View documentation" /></a>
+
 ErrorTrackerNotifier is an Elixir library that adds to the amazing [ErrorTracker](https://github.com/elixir-error-tracker/error-tracker) library by sending email and/or Discord notifications for errors found by error_tracker. Note: This is a very early version and was mostly vibe-coded with some oversight so no promises!
 
 
@@ -12,7 +16,7 @@ The package can be installed by adding `error_tracker_notifier` to your list of 
 ```elixir
 def deps do
   [
-    {:error_tracker_notifier, "~> 0.1.1"}
+    {:error_tracker_notifier, "~> 0.2"}
   ]
 end
 ```
