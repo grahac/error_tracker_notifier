@@ -6,6 +6,7 @@ defmodule ErrorTrackerNotifier.Email do
   require Logger
   import Swoosh.Email
   alias ErrorTrackerNotifier.UrlHelper
+  alias ErrorTrackerNotifier.StackTraceFormatter
 
   @doc """
   Send an email notification for a new error occurrence.
@@ -17,13 +18,7 @@ defmodule ErrorTrackerNotifier.Email do
     app_name = ErrorTrackerNotifier.get_app_name()
 
     # Extract file and line information for the subject line
-    first_line =
-      if occurrence.stacktrace && occurrence.stacktrace.lines &&
-           length(occurrence.stacktrace.lines) > 0 do
-        List.first(occurrence.stacktrace.lines)
-      else
-        nil
-      end
+    first_line = get_first_stack_line(occurrence)
 
     file = if first_line, do: first_line.file, else: "unknown_file"
     line = if first_line, do: first_line.line, else: "?"
@@ -51,13 +46,7 @@ defmodule ErrorTrackerNotifier.Email do
 
   defp occurrence_email_html(occurrence, header) do
     # Extract the first line from the stacktrace for the error location
-    first_line =
-      if occurrence.stacktrace && occurrence.stacktrace.lines &&
-           length(occurrence.stacktrace.lines) > 0 do
-        List.first(occurrence.stacktrace.lines)
-      else
-        nil
-      end
+    first_line = get_first_stack_line(occurrence)
 
     # Extract useful information from the stacktrace line
     error_location =
@@ -74,27 +63,37 @@ defmodule ErrorTrackerNotifier.Email do
     # Get the error URL
     error_url = UrlHelper.get_error_url(occurrence.error_id)
 
+    # Escape all user-controlled fields to prevent XSS
+    escaped_header = Phoenix.HTML.html_escape(header) |> Phoenix.HTML.safe_to_string()
+    escaped_error_id = Phoenix.HTML.html_escape(occurrence.error_id) |> Phoenix.HTML.safe_to_string()
+    escaped_reason = occurrence.reason |> String.slice(0..199) |> Phoenix.HTML.html_escape() |> Phoenix.HTML.safe_to_string()
+    escaped_location = Phoenix.HTML.html_escape(error_location) |> Phoenix.HTML.safe_to_string()
+    escaped_view = Phoenix.HTML.html_escape(view) |> Phoenix.HTML.safe_to_string()
+    escaped_path = Phoenix.HTML.html_escape(path) |> Phoenix.HTML.safe_to_string()
+    escaped_url = Phoenix.HTML.html_escape(error_url) |> Phoenix.HTML.safe_to_string()
+
     """
     <div style="max-width: 600px; margin: 0 auto; padding: 20px; font-family: system-ui, -apple-system, sans-serif;">
       <div style="background-color: white; border-radius: 8px; padding: 24px; box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1);">
         <h1 style="color: #dc2626; font-size: 24px; font-weight: bold; margin-bottom: 16px;">
-          #{header}
+          #{escaped_header}
         </h1>
         <p style="color: #374151; font-size: 16px; line-height: 24px; margin-bottom: 24px;">
           ErrorTracker has detected an error:
         </p>
 
         <div style="background-color: #f9fafb; border-radius: 6px; padding: 16px; margin-bottom: 24px;">
-          <p><strong>Error ID:</strong> #{occurrence.error_id}</p>
-          <p><strong>Reason:</strong> #{occurrence.reason |> String.slice(0..199)}</p>
-          <p><strong>Location:</strong> #{error_location}</p>
-          <p><strong>View:</strong> #{view}</p>
-          <p><strong>Request Path:</strong> #{path}</p>
+          <p><strong>Error ID:</strong> #{escaped_error_id}</p>
+          <p><strong>Reason:</strong> #{escaped_reason}</p>
+          <p><strong>Location:</strong> #{escaped_location}</p>
+          #{StackTraceFormatter.format_for_email(occurrence)}
+          <p><strong>View:</strong> #{escaped_view}</p>
+          <p><strong>Request Path:</strong> #{escaped_path}</p>
           <p><strong>Time:</strong> #{format_time()}</p>
         </div>
 
         <p style="margin-bottom: 24px;">
-          <a href="#{error_url}"
+          <a href="#{escaped_url}"
              style="display: inline-block; background-color: #dc2626; color: white; font-weight: 500;
                     padding: 8px 16px; border-radius: 4px; text-decoration: none;">
             View Error Details
@@ -103,6 +102,13 @@ defmodule ErrorTrackerNotifier.Email do
       </div>
     </div>
     """
+  end
+
+  defp get_first_stack_line(occurrence) do
+    case occurrence.stacktrace do
+      %{lines: [first | _]} -> first
+      _ -> nil
+    end
   end
 
   defp format_time do

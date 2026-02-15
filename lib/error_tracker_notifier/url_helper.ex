@@ -59,22 +59,18 @@ defmodule ErrorTrackerNotifier.UrlHelper do
             String.trim_trailing(url, "/")
 
           {:error, reason} ->
-            # Log error if endpoint not found or available
-            Logger.error(
-              "Base URL not configured and could not use application endpoint: #{reason}. " <>
-                "Please add to your config: config :error_tracker_notifier, base_url: \"https://your-app-domain.com\""
-            )
+            # Crash if endpoint not found or available
+            raise """
+            Base URL not configured and could not use application endpoint: #{reason}.
 
-            "http://localhost:4000"
+            Please add to your config:
+              config :error_tracker_notifier, base_url: "https://your-app-domain.com"
+            """
         end
         
       invalid ->
-        # Log error for misconfigured value
-        Logger.error(
-          "Invalid base_url configuration: #{inspect(invalid)}. Please set a valid URL string."
-        )
-        
-        "http://localhost:4000"
+        # Crash for misconfigured value
+        raise "Invalid base_url configuration: #{inspect(invalid)}. Please set a valid URL string in config :error_tracker_notifier, base_url: \"https://your-app-domain.com\""
     end
   end
 
