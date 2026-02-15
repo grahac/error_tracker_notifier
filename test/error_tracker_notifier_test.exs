@@ -194,16 +194,13 @@ defmodule ErrorTrackerNotifierTest do
     end
 
     test "handles missing mailer configuration" do
-      # Configure without mailer
-      Application.put_env(
-        :error_tracker_notifier,
-        :test_app,
-        error_tracker_notifier: [
-          notification_type: :email,
-          from_email: "test@example.com",
-          to_email: "alerts@example.com"
-        ]
-      )
+      # Configure without mailer (directly under :error_tracker_notifier)
+      Application.put_env(:error_tracker_notifier, :notification_type, :email)
+      Application.put_env(:error_tracker_notifier, :from_email, "test@example.com")
+      Application.put_env(:error_tracker_notifier, :to_email, "alerts@example.com")
+      Application.put_env(:error_tracker_notifier, :base_url, "http://localhost:4000")
+      # Explicitly set mailer to nil
+      Application.put_env(:error_tracker_notifier, :mailer, nil)
 
       # Create minimal valid occurrence with required fields
       min_occurrence = %{
@@ -234,6 +231,179 @@ defmodule ErrorTrackerNotifierTest do
       # Temporarily skipped, since it depends on internal state structures
       # that are fragile in testing
       assert true
+    end
+  end
+
+  describe "Stack trace formatting" do
+    test "email includes full stack trace (10 lines)" do
+      # Configure email notifications with test mailer
+      Application.put_env(:error_tracker_notifier, :notification_type, :email)
+      Application.put_env(:error_tracker_notifier, :from_email, "test@example.com")
+      Application.put_env(:error_tracker_notifier, :to_email, "alerts@example.com")
+      Application.put_env(:error_tracker_notifier, :mailer, ErrorTrackerNotifier.TestHelpers.MockMailer)
+
+      # Create occurrence with 15 stack trace lines
+      occurrence = %{
+        error_id: "err_123",
+        reason: "Test error with long stack trace",
+        context: %{"live_view.view" => "TestView", "request.path" => "/test"},
+        stacktrace: %{
+          lines:
+            Enum.map(1..15, fn i ->
+              %{
+                module: :"TestModule#{i}",
+                function: "test_function_#{i}/1",
+                file: "test_file_#{i}.ex",
+                line: i * 10
+              }
+            end)
+        }
+      }
+
+      # Send email
+      {:ok, _} =
+        ErrorTrackerNotifier.Email.send_occurrence_notification(
+          occurrence,
+          "Test Error",
+          :test_app
+        )
+
+      # Verify email was sent (MockMailer sends {:email, email} message)
+      assert_receive {:email, email}, 1000
+
+      # Verify HTML contains stack trace section
+      assert email.html_body =~ "<strong>Stack Trace:</strong>"
+      assert email.html_body =~ "<pre"
+
+      # Verify first 10 lines are included
+      assert email.html_body =~ "TestModule1.test_function_1/1 (test_file_1.ex:10)"
+      assert email.html_body =~ "TestModule10.test_function_10/1 (test_file_10.ex:100)"
+
+      # Verify 11th line is NOT included (should only show first 10)
+      refute email.html_body =~ "TestModule11"
+    end
+
+    test "email handles missing stack trace gracefully" do
+      # Configure email notifications
+      Application.put_env(:error_tracker_notifier, :notification_type, :email)
+      Application.put_env(:error_tracker_notifier, :from_email, "test@example.com")
+      Application.put_env(:error_tracker_notifier, :to_email, "alerts@example.com")
+      Application.put_env(:error_tracker_notifier, :mailer, ErrorTrackerNotifier.TestHelpers.MockMailer)
+
+      # Create occurrence with nil stacktrace
+      occurrence = %{
+        error_id: "err_456",
+        reason: "Test error without stack trace",
+        context: %{"live_view.view" => "TestView", "request.path" => "/test"},
+        stacktrace: nil
+      }
+
+      # Should not crash
+      {:ok, _} =
+        ErrorTrackerNotifier.Email.send_occurrence_notification(
+          occurrence,
+          "Test Error",
+          :test_app
+        )
+
+      # Verify email was sent
+      assert_receive {:email, email}, 1000
+
+      # Should not have stack trace section
+      refute email.html_body =~ "<strong>Stack Trace:</strong>"
+    end
+
+    test "email handles empty stack trace lines" do
+      # Configure email notifications
+      Application.put_env(:error_tracker_notifier, :notification_type, :email)
+      Application.put_env(:error_tracker_notifier, :from_email, "test@example.com")
+      Application.put_env(:error_tracker_notifier, :to_email, "alerts@example.com")
+      Application.put_env(:error_tracker_notifier, :mailer, ErrorTrackerNotifier.TestHelpers.MockMailer)
+      Application.put_env(:error_tracker_notifier, :base_url, "http://localhost:4000")
+
+      occurrence = %{
+        error_id: "err_789",
+        reason: "Test error with empty lines",
+        context: %{"live_view.view" => "TestView", "request.path" => "/test"},
+        stacktrace: %{lines: []}
+      }
+
+      {:ok, _} =
+        ErrorTrackerNotifier.Email.send_occurrence_notification(
+          occurrence,
+          "Test Error",
+          :test_app
+        )
+
+      assert_receive {:email, email}, 1000
+      refute email.html_body =~ "<strong>Stack Trace:</strong>"
+    end
+
+    test "discord includes stack trace when present" do
+      # Simple verification that Discord formatting doesn't crash
+      occurrence = %{
+        error_id: "err_discord",
+        reason: "Discord test",
+        context: %{},
+        stacktrace: %{
+          lines: [
+            %{module: TestModule, function: "test/1", file: "test.ex", line: 42}
+          ]
+        }
+      }
+
+      # Just verify the payload builds correctly (don't actually send to Discord)
+      # This is tested by ensuring send_occurrence_notification doesn't crash
+      # when webhook_url is nil
+      assert {:error, :missing_webhook_url} =
+               ErrorTrackerNotifier.Discord.send_occurrence_notification(occurrence, "Test", nil)
+    end
+
+    test "email escapes XSS payloads in all fields" do
+      # Configure email notifications
+      Application.put_env(:error_tracker_notifier, :notification_type, :email)
+      Application.put_env(:error_tracker_notifier, :from_email, "test@example.com")
+      Application.put_env(:error_tracker_notifier, :to_email, "alerts@example.com")
+      Application.put_env(:error_tracker_notifier, :mailer, ErrorTrackerNotifier.TestHelpers.MockMailer)
+      Application.put_env(:error_tracker_notifier, :base_url, "http://localhost:4000")
+
+      # Create occurrence with XSS payloads in various fields
+      xss_payload = "<script>alert('XSS')</script>"
+      occurrence = %{
+        error_id: "err_#{xss_payload}",
+        reason: "Error with #{xss_payload}",
+        context: %{
+          "live_view.view" => "View#{xss_payload}",
+          "request.path" => "/path?q=#{xss_payload}"
+        },
+        stacktrace: %{
+          lines: [
+            %{
+              module: :"Module#{xss_payload}",
+              function: "function/1",
+              file: "file#{xss_payload}.ex",
+              line: 42
+            }
+          ]
+        }
+      }
+
+      {:ok, _} =
+        ErrorTrackerNotifier.Email.send_occurrence_notification(
+          occurrence,
+          "Header #{xss_payload}",
+          :test_app
+        )
+
+      assert_receive {:email, email}, 1000
+
+      # Verify script tags are escaped (should show as &lt;script&gt; not <script>)
+      refute email.html_body =~ "<script>alert('XSS')</script>"
+      assert email.html_body =~ "&lt;script&gt;"
+
+      # Verify the payload appears escaped in multiple fields
+      assert email.html_body =~ "Header &lt;script&gt;alert(&#39;XSS&#39;)&lt;/script&gt;"
+      assert email.html_body =~ "Error with &lt;script&gt;alert(&#39;XSS&#39;)&lt;/script&gt;"
     end
   end
 

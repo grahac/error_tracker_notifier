@@ -5,6 +5,7 @@ defmodule ErrorTrackerNotifier.Discord do
 
   require Logger
   alias ErrorTrackerNotifier.UrlHelper
+  alias ErrorTrackerNotifier.StackTraceFormatter
 
   @doc """
   Send a Discord webhook notification for a new error occurrence.
@@ -19,13 +20,7 @@ defmodule ErrorTrackerNotifier.Discord do
       {:error, :missing_webhook_url}
     else
       # Extract file and line information
-      first_line =
-        if occurrence.stacktrace && occurrence.stacktrace.lines &&
-             length(occurrence.stacktrace.lines) > 0 do
-          List.first(occurrence.stacktrace.lines)
-        else
-          nil
-        end
+      first_line = get_first_stack_line(occurrence)
 
       error_location =
         if first_line do
@@ -43,6 +38,24 @@ defmodule ErrorTrackerNotifier.Discord do
       error_name = occurrence.reason || "Unknown error"
 
       # Build the message payload
+      fields =
+        [
+          %{name: "Error ID", value: occurrence.error_id, inline: true},
+          %{
+            name: "Reason",
+            value: truncate_message(occurrence.reason || "Unknown"),
+            inline: false
+          },
+          %{name: "Location", value: error_location, inline: false},
+          if stack_trace = StackTraceFormatter.format_for_discord(occurrence) do
+            %{name: "Stack Trace", value: stack_trace, inline: false}
+          end,
+          %{name: "View", value: view, inline: true},
+          %{name: "Request Path", value: path, inline: true},
+          %{name: "Time", value: format_time(), inline: false}
+        ]
+        |> Enum.reject(&is_nil/1)
+
       payload = %{
         embeds: [
           %{
@@ -50,18 +63,7 @@ defmodule ErrorTrackerNotifier.Discord do
             # Indigo color
             color: 0x4F46E5,
             description: "Error: #{error_name}",
-            fields: [
-              %{name: "Error ID", value: occurrence.error_id, inline: true},
-              %{
-                name: "Reason",
-                value: truncate_message(occurrence.reason || "Unknown"),
-                inline: false
-              },
-              %{name: "Location", value: error_location, inline: false},
-              %{name: "View", value: view, inline: true},
-              %{name: "Request Path", value: path, inline: true},
-              %{name: "Time", value: format_time(), inline: false}
-            ],
+            fields: fields,
             url: error_url,
             footer: %{
               text: "ErrorTracker Notification"
@@ -100,6 +102,13 @@ defmodule ErrorTrackerNotifier.Discord do
 
       {:error, %{reason: reason}} ->
         {:error, "HTTP request failed: #{inspect(reason)}"}
+    end
+  end
+
+  defp get_first_stack_line(occurrence) do
+    case occurrence.stacktrace do
+      %{lines: [first | _]} -> first
+      _ -> nil
     end
   end
 

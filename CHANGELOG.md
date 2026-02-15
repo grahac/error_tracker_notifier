@@ -1,6 +1,16 @@
 # Changelog
 
-## 0.2.0 (Unreleased)
+## 0.2.1 (2026-02-15)
+
+### Added
+- **Stack traces in notifications**: Email and Discord notifications now include the top 10 stack trace lines (or all if fewer than 10) in an easy-to-copy format for pasting into AI debugging tools
+- Automated tests for stack trace formatting with comprehensive edge case coverage
+
+### Changed
+- Email notifications now display stack traces in a monospace `<pre>` block with HTML escaping for security
+- Discord notifications now display stack traces in code blocks with automatic truncation to respect Discord's 1024 character field limit
+
+## 0.2.0 (2026-01-15)
 
 ### Breaking Changes
 - Use standard library configuration pattern (`config :error_tracker_notifier, key: value`)

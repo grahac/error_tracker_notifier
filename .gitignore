@@ -24,3 +24,6 @@ error_tracker_notifier-*.tar
 
 # Temporary files, for example, from tests.
 /tmp/
+
+# Todo tracking
+/todos/
