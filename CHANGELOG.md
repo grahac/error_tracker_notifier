@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.2 (2026-07-28)
+
+### Fixed
+- Remove an unreachable fallback in email notification subjects that triggered a compiler warning
+
 ## 0.2.1 (2026-02-15)
 
 ### Added
