@@ -22,7 +22,7 @@ defmodule ErrorTrackerNotifier.Email do
 
     file = if first_line, do: first_line.file, else: "unknown_file"
     line = if first_line, do: first_line.line, else: "?"
-    error_name = occurrence.reason |> String.slice(0, 80) || "Unknown error"
+    error_name = String.slice(occurrence.reason, 0, 80)
 
     subject = "[#{app_name}] Error: #{error_name} - #{file} - #{line}"
 
