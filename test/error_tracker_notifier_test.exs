@@ -97,7 +97,7 @@ defmodule ErrorTrackerNotifierTest do
       assert state.setup_complete
 
       # Verify the handler is attached
-      handlers = :telemetry.list_handlers([:error_tracker_notifier, :error, :new])
+      handlers = :telemetry.list_handlers([:error_tracker, :error, :new])
 
       assert Enum.any?(handlers, fn handler ->
                handler.id == "error-tracker-notifications"
@@ -105,11 +105,15 @@ defmodule ErrorTrackerNotifierTest do
     end
 
     test "processes new error telemetry events", %{occurrence: occurrence} do
+      # Set log level to debug to capture all logs
+      prev_level = Logger.level()
+      Logger.configure(level: :debug)
+
       logs =
         capture_log(fn ->
           # Send a telemetry event simulating a new error
           :telemetry.execute(
-            [:error_tracker_notifier, :error, :new],
+            [:error_tracker, :error, :new],
             %{system_time: System.system_time()},
             %{
               error: %{id: occurrence.error_id},
@@ -120,6 +124,9 @@ defmodule ErrorTrackerNotifierTest do
           # Give some time for async processing
           Process.sleep(100)
         end)
+
+      # Reset log level
+      Logger.configure(level: prev_level)
 
       assert logs =~ "ErrorTrackerNotifier event: new error"
     end
@@ -133,7 +140,7 @@ defmodule ErrorTrackerNotifierTest do
         capture_log(fn ->
           # Send a telemetry event simulating a new occurrence
           :telemetry.execute(
-            [:error_tracker_notifier, :occurrence, :new],
+            [:error_tracker, :occurrence, :new],
             %{system_time: System.system_time()},
             %{occurrence: occurrence}
           )
