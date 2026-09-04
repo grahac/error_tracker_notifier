@@ -6,22 +6,34 @@ defmodule ErrorTrackerNotifierTest do
   alias ErrorTrackerNotifier.Discord
   alias ErrorTrackerNotifier.Email
 
+  @config_keys [
+    :notification_type,
+    :throttle_seconds,
+    :from_email,
+    :to_email,
+    :mailer,
+    :base_url,
+    :webhook_url,
+    :error_tracker_path,
+    :config_app_name
+  ]
+
   setup do
-    # Set up mocks using Mox
-    # Define test notification type
-    app = Application.get_all_env(:error_tracker_notifier)
-    on_load = Application.get_env(:error_tracker_notifier, :on_load, [])
+    original_config =
+      Map.new(@config_keys, fn key ->
+        {key, Application.fetch_env(:error_tracker_notifier, key)}
+      end)
 
-    Application.put_env(:error_tracker_notifier, :on_load, on_load)
+    Application.put_env(:error_tracker_notifier, :notification_type, :test)
+    Application.put_env(:error_tracker_notifier, :throttle_seconds, 1)
 
-    # Configure with test notification type only, no external services
-    Application.put_env(:error_tracker_notifier, :test_app,
-      error_tracker_notifier: [
-        notification_type: :test,
-        throttle_seconds: 1,
-        mailer: ErrorTrackerNotifier.TestHelpers.MockMailer
-      ]
+    Application.put_env(
+      :error_tracker_notifier,
+      :mailer,
+      ErrorTrackerNotifier.TestHelpers.MockMailer
     )
+
+    Application.put_env(:error_tracker_notifier, :base_url, "https://example.com")
 
     # Clean start for the GenServer
     if pid = Process.whereis(ErrorTrackerNotifier) do
@@ -33,10 +45,15 @@ defmodule ErrorTrackerNotifierTest do
     {:ok, test_pid} = ErrorTrackerNotifier.start_link([])
 
     on_exit(fn ->
-      # Reset the application state
-      Application.put_env(:error_tracker_notifier, :test_app, [])
       Process.exit(test_pid, :normal)
       :telemetry.detach("error-tracker-notifications")
+
+      Enum.each(original_config, fn {key, original_value} ->
+        case original_value do
+          {:ok, value} -> Application.put_env(:error_tracker_notifier, key, value)
+          :error -> Application.delete_env(:error_tracker_notifier, key)
+        end
+      end)
     end)
 
     # Create a sample occurrence for testing
@@ -63,8 +80,7 @@ defmodule ErrorTrackerNotifierTest do
     # Return the test data
     %{
       occurrence: occurrence,
-      test_pid: test_pid,
-      original_app_env: app
+      test_pid: test_pid
     }
   end
 
@@ -97,7 +113,7 @@ defmodule ErrorTrackerNotifierTest do
       assert state.setup_complete
 
       # Verify the handler is attached
-      handlers = :telemetry.list_handlers([:error_tracker_notifier, :error, :new])
+      handlers = :telemetry.list_handlers([:error_tracker, :error, :new])
 
       assert Enum.any?(handlers, fn handler ->
                handler.id == "error-tracker-notifications"
@@ -109,7 +125,7 @@ defmodule ErrorTrackerNotifierTest do
         capture_log(fn ->
           # Send a telemetry event simulating a new error
           :telemetry.execute(
-            [:error_tracker_notifier, :error, :new],
+            [:error_tracker, :error, :new],
             %{system_time: System.system_time()},
             %{
               error: %{id: occurrence.error_id},
@@ -133,7 +149,7 @@ defmodule ErrorTrackerNotifierTest do
         capture_log(fn ->
           # Send a telemetry event simulating a new occurrence
           :telemetry.execute(
-            [:error_tracker_notifier, :occurrence, :new],
+            [:error_tracker, :occurrence, :new],
             %{system_time: System.system_time()},
             %{occurrence: occurrence}
           )
@@ -240,7 +256,12 @@ defmodule ErrorTrackerNotifierTest do
       Application.put_env(:error_tracker_notifier, :notification_type, :email)
       Application.put_env(:error_tracker_notifier, :from_email, "test@example.com")
       Application.put_env(:error_tracker_notifier, :to_email, "alerts@example.com")
-      Application.put_env(:error_tracker_notifier, :mailer, ErrorTrackerNotifier.TestHelpers.MockMailer)
+
+      Application.put_env(
+        :error_tracker_notifier,
+        :mailer,
+        ErrorTrackerNotifier.TestHelpers.MockMailer
+      )
 
       # Create occurrence with 15 stack trace lines
       occurrence = %{
@@ -288,7 +309,12 @@ defmodule ErrorTrackerNotifierTest do
       Application.put_env(:error_tracker_notifier, :notification_type, :email)
       Application.put_env(:error_tracker_notifier, :from_email, "test@example.com")
       Application.put_env(:error_tracker_notifier, :to_email, "alerts@example.com")
-      Application.put_env(:error_tracker_notifier, :mailer, ErrorTrackerNotifier.TestHelpers.MockMailer)
+
+      Application.put_env(
+        :error_tracker_notifier,
+        :mailer,
+        ErrorTrackerNotifier.TestHelpers.MockMailer
+      )
 
       # Create occurrence with nil stacktrace
       occurrence = %{
@@ -318,7 +344,13 @@ defmodule ErrorTrackerNotifierTest do
       Application.put_env(:error_tracker_notifier, :notification_type, :email)
       Application.put_env(:error_tracker_notifier, :from_email, "test@example.com")
       Application.put_env(:error_tracker_notifier, :to_email, "alerts@example.com")
-      Application.put_env(:error_tracker_notifier, :mailer, ErrorTrackerNotifier.TestHelpers.MockMailer)
+
+      Application.put_env(
+        :error_tracker_notifier,
+        :mailer,
+        ErrorTrackerNotifier.TestHelpers.MockMailer
+      )
+
       Application.put_env(:error_tracker_notifier, :base_url, "http://localhost:4000")
 
       occurrence = %{
@@ -364,11 +396,18 @@ defmodule ErrorTrackerNotifierTest do
       Application.put_env(:error_tracker_notifier, :notification_type, :email)
       Application.put_env(:error_tracker_notifier, :from_email, "test@example.com")
       Application.put_env(:error_tracker_notifier, :to_email, "alerts@example.com")
-      Application.put_env(:error_tracker_notifier, :mailer, ErrorTrackerNotifier.TestHelpers.MockMailer)
+
+      Application.put_env(
+        :error_tracker_notifier,
+        :mailer,
+        ErrorTrackerNotifier.TestHelpers.MockMailer
+      )
+
       Application.put_env(:error_tracker_notifier, :base_url, "http://localhost:4000")
 
       # Create occurrence with XSS payloads in various fields
       xss_payload = "<script>alert('XSS')</script>"
+
       occurrence = %{
         error_id: "err_#{xss_payload}",
         reason: "Error with #{xss_payload}",
