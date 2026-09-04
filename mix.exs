@@ -28,7 +28,7 @@ defmodule ErrorTrackerNotifier.MixProject do
       {:error_tracker, "~> 0.5"},
       {:telemetry, "~> 1.0"},
       {:jason, "~> 1.4"},
-      {:httpoison, "~> 2.0"},
+      {:httpoison, "~> 3.0"},
       {:ex_doc, ">= 0.0.0", only: :dev, runtime: false},
       {:meck, "~> 0.9.2", only: :test}
     ]
