@@ -30,7 +30,7 @@ defmodule ErrorTrackerNotifier.MixProject do
       {:jason, "~> 1.4"},
       {:httpoison, "~> 3.0"},
       {:ex_doc, ">= 0.0.0", only: :dev, runtime: false},
-      {:meck, "~> 0.9.2", only: :test}
+      {:meck, "~> 1.2.0", only: :test}
     ]
   end
 
