@@ -25,4 +25,8 @@ jobs:
           otp-version: "28"
           elixir-version: "1.20.2"
       - run: mix local.hex --force
+      # hex.audit resolves the dependency tree, so it exits 1 on a fresh
+      # checkout with no deps/ — without this the audit is red every run and
+      # stops being read.
+      - run: mix deps.get
       - run: mix hex.audit
