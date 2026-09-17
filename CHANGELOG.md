@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.3.0 (2026-09-16)
+
+### Changed
+- **Requirement change**: HTTPoison requirement raised from `~> 2.0` to `~> 3.0` (part of the dependency security refresh). Apps pinned to HTTPoison 2.x must upgrade to resolve this version.
+- Removed unused `meck` test dependency
+- Refreshed dev/test dependency locks (swoosh 1.28.1, phoenix 1.8.14, ex_doc 0.40.4)
+- No library code changes — `lib/` is identical to 0.2.2
+
 ## 0.2.2 (2026-07-28)
 
 ### Fixed
