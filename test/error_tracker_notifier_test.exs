@@ -121,6 +121,10 @@ defmodule ErrorTrackerNotifierTest do
     end
 
     test "processes new error telemetry events", %{occurrence: occurrence} do
+      # Set log level to debug to capture all logs
+      prev_level = Logger.level()
+      Logger.configure(level: :debug)
+
       logs =
         capture_log(fn ->
           # Send a telemetry event simulating a new error
@@ -136,6 +140,9 @@ defmodule ErrorTrackerNotifierTest do
           # Give some time for async processing
           Process.sleep(100)
         end)
+
+      # Reset log level
+      Logger.configure(level: prev_level)
 
       assert logs =~ "ErrorTrackerNotifier event: new error"
     end
