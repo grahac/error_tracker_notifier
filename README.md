@@ -3,7 +3,7 @@
 <a title="Latest release" href="https://hex.pm/packages/error_tracker_notifier"><img src="https://img.shields.io/hexpm/v/error_tracker_notifier.svg" alt="Latest release" /></a>
 <a title="View documentation" href="https://hexdocs.pm/error_tracker_notifier"><img src="https://img.shields.io/badge/hex.pm-docs-blue.svg" alt="View documentation" /></a>
 
-ErrorTrackerNotifier is an Elixir library that adds to the amazing [ErrorTracker](https://github.com/elixir-error-tracker/error-tracker) library by sending email and/or Discord notifications for errors found by error_tracker. Note: This is a very early version and was mostly vibe-coded with some oversight so no promises!
+ErrorTrackerNotifier is an Elixir library that adds to the amazing [ErrorTracker](https://github.com/elixir-error-tracker/error-tracker) library by sending email, Discord, and/or Telegram notifications for errors found by error_tracker. Note: This is a very early version and was mostly vibe-coded with some oversight so no promises!
 
 
 
@@ -55,17 +55,36 @@ config :error_tracker_notifier,
   webhook_url: "https://discord.com/api/webhooks/your-webhook-url"
 ```
 
-### Using Multiple Notification Types Together
+### Telegram Notifications
 
-You can configure both email and Discord notifications to be sent simultaneously:
+Configure Telegram notifications:
 
 ```elixir
 config :error_tracker_notifier,
-  notification_type: [:email, :discord], # list of notification types
+  notification_type: :telegram,     # can be a single atom or a list
+  telegram_bot_token: "your-bot-token",
+  telegram_chat_id: "your-chat-id"
+```
+
+To set up Telegram notifications:
+1. Create a bot by messaging [@BotFather](https://t.me/botfather) on Telegram
+2. Use `/newbot` command and follow the instructions to get your bot token
+3. Get your chat ID by messaging your bot and visiting `https://api.telegram.org/bot<your-bot-token>/getUpdates`
+4. The chat ID will be in the response under `message.chat.id`
+
+### Using Multiple Notification Types Together
+
+You can configure multiple notification types to be sent simultaneously:
+
+```elixir
+config :error_tracker_notifier,
+  notification_type: [:email, :discord, :telegram], # list of notification types
   from_email: "support@example.com",
   to_email: "support@example.com",
   mailer: MyApp.Mailer,               # your app's Swoosh mailer module
   webhook_url: "https://discord.com/api/webhooks/your-webhook-url",
+  telegram_bot_token: "your-bot-token",
+  telegram_chat_id: "your-chat-id",
   base_url: "https://your-app-domain.com", # base URL for error links
   error_tracker_path: "/errors",      # path to errors (default: "/dev/errors/")
   throttle_seconds: 60                # time to wait between notifications for the same error
@@ -90,13 +109,13 @@ You can customize the URLs generated for error links by configuring both the bas
 ```elixir
 config :error_tracker_notifier,
   # ... other settings
-  base_url: "https://your-app-domain.com", 
+  base_url: "https://your-app-domain.com",
   error_tracker_path: "/errors"  # default is "/dev/errors/"
 ```
 
 The full URL generated will be: `<base_url><error_tracker_path>/<error_id>`
 
-For example, with the above configuration, an error with ID `abc123` would have the URL: 
+For example, with the above configuration, an error with ID `abc123` would have the URL:
 `https://your-app-domain.com/errors/abc123`
 
 ## Setup
@@ -130,7 +149,7 @@ If you don't need throttling or just want to use the telemetry handlers without 
 ErrorTrackerNotifier.setup_telemetry()
 ```
 
-This approach only sets up the telemetry handlers without starting the GenServer. Note that with this approach, throttling won't be available - every error will trigger a notification. 
+This approach only sets up the telemetry handlers without starting the GenServer. Note that with this approach, throttling won't be available - every error will trigger a notification.
 #### Setting up a Discord Webhook
 
 To set up a Discord webhook for error notifications:
@@ -194,6 +213,10 @@ Discord notifications provide several advantages:
 
 The Discord notifications include the same information as emails, formatted as rich embeds for better readability, including error occurrence counts when throttling is active.
 
+### Telegram Notifications
+
+The Telegram notifications include the same information as emails and Discord, formatted as HTML messages for better readability, including error occurrence counts when throttling is active.
+
 ## Dependencies
 
 This library depends on:
@@ -203,8 +226,8 @@ This library depends on:
 For email notifications:
 - `swoosh` for email delivery
 
-For Discord notifications:
-- `httpoison` for making HTTP requests to Discord API
+For Discord and Telegram notifications:
+- `httpoison` for making HTTP requests to Discord/Telegram APIs
 - `jason` for JSON encoding
 
 ## Documentation
@@ -226,7 +249,7 @@ When running in development or test environments, ErrorTrackerNotifier will auto
 # Only in prod.exs or in runtime.exs with environment check
 if config_env() == :prod do
   config :error_tracker_notifier,
-    notification_type: [:email, :discord],
+    notification_type: [:email, :discord, :telegram],
     # ... other configuration
 end
 ```
@@ -244,7 +267,7 @@ ErrorTrackerNotifier provides a clean way to handle testing without affecting pr
    ```
 
 2. In test mode, configuration validation is bypassed, allowing tests to run without error notifications
-   
+
 3. You can still configure specific test behavior if needed:
    ```elixir
    # In test setup

@@ -23,13 +23,15 @@ defmodule ErrorTrackerNotifier do
     webhook_url: "https://discord.com/api/webhooks/your-webhook-url",
     throttle_seconds: 30  # Optional: Throttle time between notifications
 
-  # For both email and Discord notifications
+  # For multiple notification types
   config :error_tracker_notifier,
-    notification_type: [:email, :discord],  # Can be a single atom or a list
+    notification_type: [:email, :discord, :telegram],  # Can be a single atom or a list
     from_email: "support@example.com",
     to_email: "support@example.com",
     mailer: MyApp.Mailer,
     webhook_url: "https://discord.com/api/webhooks/your-webhook-url",
+    telegram_bot_token: "your-bot-token",
+    telegram_chat_id: "your-chat-id",
     throttle_seconds: 60  # Optional: Throttle time between notifications
   ```
 
@@ -55,6 +57,7 @@ defmodule ErrorTrackerNotifier do
 
   alias ErrorTrackerNotifier.Email
   alias ErrorTrackerNotifier.Discord
+  alias ErrorTrackerNotifier.Telegram
 
   # Cleanup old entries every 5 minutes
   @cleanup_interval :timer.minutes(5)
@@ -117,30 +120,32 @@ defmodule ErrorTrackerNotifier do
   def get_config(key, default) do
     # Get config directly under :error_tracker_notifier
     value = Application.get_env(:error_tracker_notifier, key)
-    
+
     # Check for legacy config and show warning
     if is_nil(value) do
       app = app_atom()
+
       if app != :error_tracker_notifier do
         legacy_config = Application.get_env(app, :error_tracker_notifier)
+
         if legacy_config && Keyword.has_key?(legacy_config, key) do
           Logger.error("""
           [ERROR] Found configuration under #{inspect(app)}:error_tracker_notifier instead of :error_tracker_notifier
-          
+
           The configuration format has changed. Please update your config files:
-          
+
           Old format (no longer supported):
             config :#{app}, :error_tracker_notifier, key: value
-          
+
           New format (required):
             config :error_tracker_notifier, key: value
-          
+
           All configuration must be moved to the new format.
           """)
         end
       end
     end
-    
+
     # Return the value or default
     value || default
   end
@@ -389,6 +394,9 @@ defmodule ErrorTrackerNotifier do
         :discord ->
           Discord.send_occurrence_notification(occurrence, header_with_count, config_app_name())
 
+        :telegram ->
+          Telegram.send_occurrence_notification(occurrence, header_with_count, config_app_name())
+
         :test ->
           # Special case for tests - don't actually send notifications
           Logger.debug("Test notification for error #{occurrence.error_id}")
@@ -484,37 +492,39 @@ defmodule ErrorTrackerNotifier do
       :normal ->
         # Get notification type from the config
         notification_type = Application.get_env(:error_tracker_notifier, :notification_type)
-        
+
         # Check for legacy config and show warning
         app = app_atom()
+
         if app != :error_tracker_notifier do
           legacy_config = Application.get_env(app, :error_tracker_notifier)
+
           if legacy_config && Keyword.has_key?(legacy_config, :notification_type) do
             Logger.error("""
             [ERROR] Found notification configuration under #{inspect(app)}:error_tracker_notifier instead of :error_tracker_notifier
-            
+
             The configuration format has changed. Please update your config files:
-            
+
             Old format (no longer supported):
-              config :#{app}, :error_tracker_notifier, 
+              config :#{app}, :error_tracker_notifier,
                 notification_type: :email,
                 # other settings...
-            
+
             New format (required):
-              config :error_tracker_notifier, 
+              config :error_tracker_notifier,
                 notification_type: :email,
                 # other settings...
             """)
           end
         end
-        
+
         # If no notification type is set, return false
         if is_nil(notification_type) do
           false
         else
           # Convert to list if it's a single atom
           notification_types = List.wrap(notification_type)
-          
+
           # Check each notification type for required config
           Enum.any?(notification_types, fn type ->
             case type do
@@ -523,6 +533,9 @@ defmodule ErrorTrackerNotifier do
 
               :discord ->
                 has_discord_config_direct?()
+
+              :telegram ->
+                has_telegram_config_direct?()
 
               :test ->
                 # Test type doesn't need additional config
@@ -538,7 +551,7 @@ defmodule ErrorTrackerNotifier do
 
   # These functions are kept for backward compatibility during refactoring
   # but are no longer used in the main code path
-  
+
   # Check if we have the minimum required email configuration (direct config)
   defp has_email_config_direct?() do
     from_email = Application.get_env(:error_tracker_notifier, :from_email)
@@ -555,5 +568,14 @@ defmodule ErrorTrackerNotifier do
 
     # Webhook URL is required for Discord configuration
     not is_nil(webhook_url)
+  end
+
+  # Check if we have the minimum required Telegram configuration (direct config)
+  defp has_telegram_config_direct?() do
+    bot_token = Application.get_env(:error_tracker_notifier, :telegram_bot_token)
+    chat_id = Application.get_env(:error_tracker_notifier, :telegram_chat_id)
+
+    # Both bot token and chat ID are required for Telegram configuration
+    not is_nil(bot_token) and not is_nil(chat_id)
   end
 end
