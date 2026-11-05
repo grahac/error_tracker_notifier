@@ -65,8 +65,16 @@ defmodule ErrorTrackerNotifier.Email do
 
     # Escape all user-controlled fields to prevent XSS
     escaped_header = Phoenix.HTML.html_escape(header) |> Phoenix.HTML.safe_to_string()
-    escaped_error_id = Phoenix.HTML.html_escape(occurrence.error_id) |> Phoenix.HTML.safe_to_string()
-    escaped_reason = occurrence.reason |> String.slice(0..199) |> Phoenix.HTML.html_escape() |> Phoenix.HTML.safe_to_string()
+
+    escaped_error_id =
+      Phoenix.HTML.html_escape(occurrence.error_id) |> Phoenix.HTML.safe_to_string()
+
+    escaped_reason =
+      occurrence.reason
+      |> String.slice(0..199)
+      |> Phoenix.HTML.html_escape()
+      |> Phoenix.HTML.safe_to_string()
+
     escaped_location = Phoenix.HTML.html_escape(error_location) |> Phoenix.HTML.safe_to_string()
     escaped_view = Phoenix.HTML.html_escape(view) |> Phoenix.HTML.safe_to_string()
     escaped_path = Phoenix.HTML.html_escape(path) |> Phoenix.HTML.safe_to_string()
