@@ -41,7 +41,7 @@ defmodule ErrorTrackerNotifier.MixProject do
       files: ~w(lib .formatter.exs mix.exs README.md LICENSE)
     ]
   end
-  
+
   defp docs do
     [
       main: "readme",
